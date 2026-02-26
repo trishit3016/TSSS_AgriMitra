@@ -2,6 +2,8 @@
 
 **AgriChain** is an intelligent, farm-to-market recommendation engine designed specifically for Indian farmers. By acting as a "Trust Engine," it bridges the gap between complex agricultural data and actionable, plain-language advice to tell farmers exactly **when to harvest**, **where to sell**, and most importantly, **why** that is the best decision.
 
+> 📄 **[View the full Design Document →](./DESIGN.md)** for comprehensive architecture, data models, API specifications, correctness properties, and implementation roadmap.
+
 ---
 
 ## ⚠️ The Problem
@@ -49,42 +51,112 @@ Real-time tracking of humidity and spoilage risks, accompanied by actionable, co
 
 ## 🛠️ Technical Architecture & Tech Stack
 
-To ensure ultra-low latency on mobile networks while delivering complex AI reasoning, AgriChain utilizes a **Tool-Calling Agentic Architecture** rather than a slow, heavy multi-agent system.
+AgriChain utilizes a **Multi-Agent Agentic Architecture** with progressive streaming UI to deliver complex AI reasoning with ultra-low latency on mobile networks.
 
-* **Frontend:** Flutter
-  * *Why:* Compiles to highly optimized native code for low-end Android devices and handles offline caching beautifully.
-* **Backend:** Python (FastAPI)
-  * *Why:* Fast, lightweight, and inherently designed to handle the asynchronous API calls needed for our AI and data fetching.
-* **AI Orchestrator (The Brain):** Kimi K2.5 via NVIDIA NIM API
-  * *Why:* Exceptionally strong at tool-calling and reasoning. Cloud-hosted via NVIDIA NIM ensures no heavy local models are needed.
-* **Knowledge Graph (The Memory):** Neo4j (GraphRAG)
-  * *Why:* Maps dynamic relationships between entities (e.g., `Crop` -> *is vulnerable to* -> `High Humidity` -> *present in* -> `Nagpur`).
-* **Data Sources (The Fuel):**
-  * **AIKosh:** For localized, official Indian agricultural datasets and Mandi prices.
-  * **OpenWeatherMap API:** For hyper-local, real-time 5-day weather forecasting.
+### Architecture Overview
+
+```mermaid
+graph TB
+    subgraph "Frontend Layer"
+        PWA[Next.js 14+ PWA<br/>TypeScript + Tailwind + shadcn/ui]
+        UI[Generative UI Components<br/>ActionBanner, WeatherCard, MarketCard, SpoilageCard]
+    end
+    
+    subgraph "AI Middleware"
+        VSDK[Vercel AI SDK streamUI]
+        NIM[NVIDIA NIM API<br/>Kimi K2.5 / Llama-3-70B]
+    end
+    
+    subgraph "Backend Layer"
+        API[FastAPI REST API]
+        LG[LangGraph Multi-Agent System]
+    end
+    
+    subgraph "Data Layer"
+        NEO[(Neo4j AuraDB)]
+        SUPA[(Supabase PostgreSQL)]
+        GEE[Google Earth Engine]
+        OWM[OpenWeatherMap API]
+        AGM[Agmarknet API]
+    end
+    
+    PWA --> VSDK --> NIM --> API --> LG
+    LG --> NEO
+    LG --> SUPA
+    LG --> GEE
+    LG --> OWM
+    LG --> AGM
+```
+
+### Tech Stack
+
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| **Frontend** | Next.js 14+ (App Router), TypeScript, Tailwind CSS, shadcn/ui | Progressive Web App with streaming UI |
+| **AI Orchestration** | NVIDIA NIM API (Kimi K2.5), Vercel AI SDK | LLM-powered recommendation synthesis |
+| **Backend** | FastAPI (Python 3.11+), LangGraph, Pydantic v2 | Multi-agent orchestration & API layer |
+| **Knowledge Graph** | Neo4j AuraDB (GraphRAG) | Biological rules engine (ICAR + AGROVOC) |
+| **Caching** | Supabase PostgreSQL, Redis | Satellite data cache & async task queue |
+| **Data Sources** | Google Earth Engine, OpenWeatherMap, Agmarknet, AIKosh | Satellite, weather, and market intelligence |
+| **Async Processing** | Celery + Redis | Background satellite data fetching |
+
+### Multi-Agent System
+
+AgriChain uses a **Supervisor Pattern** with three specialized agents:
+
+- **🛰️ Geospatial Agent** — Fetches satellite data (NDVI, soil moisture, rainfall) from Google Earth Engine + weather forecasts from OpenWeatherMap
+- **🌿 Agronomist Agent (GraphRAG)** — Queries Neo4j biological rules engine for crop-specific spoilage thresholds validated against ICAR guidelines
+- **💰 Economist Agent** — Fetches live Mandi prices from Agmarknet with AIKosh fallback, calculates distance-adjusted market recommendations
 
 ---
 
 ## ⚙️ How the System Works (Data Flow)
 
-1. **Trigger:** The farmer opens the app. The app securely sends their location, crop type, and local storage conditions to the FastAPI backend.
-2. **Orchestration:** The LangChain agent (powered by Kimi K2.5) receives the request and determines what information it needs.
-3. **Tool Execution:** 
-   * Queries **AIKosh** for current market prices in surrounding Mandis.
-   * Queries **OpenWeatherMap** for the 5-day forecast.
-   * Queries the **Neo4j Graph Database** to determine the exact spoilage risk for that specific crop under current weather conditions.
-4. **Synthesis:** Kimi K2.5 evaluates the retrieved data, runs logical checks, and generates a plain-language recommendation.
-5. **Delivery:** The Flutter app receives a clean JSON payload and renders it into the simple, reality-first UI using Action Cards and a Traffic Light system.
+1. **Trigger:** The farmer opens the PWA. The app sends their location, crop type, and language preference to the backend.
+2. **Orchestration:** The LangGraph Supervisor Agent dispatches requests to all three agents in parallel.
+3. **Parallel Agent Execution:**
+   - **Geospatial Agent** checks cache → fetches satellite data + weather forecast
+   - **Agronomist Agent** queries Neo4j for biological spoilage rules
+   - **Economist Agent** fetches live Mandi prices from Agmarknet/AIKosh
+4. **Synthesis:** The Supervisor Agent synthesizes all agent outputs using NVIDIA NIM to generate an explainable recommendation.
+5. **Streaming Delivery:** UI components stream progressively — ActionBanner first (critical decision), then WeatherCard, MarketCard, SpoilageCard, and finally the detailed reasoning chain.
+
+---
+
+## 🎯 Key Design Principles
+
+| Principle | Description |
+|-----------|-------------|
+| **Explainability First** | Every recommendation includes transparent reasoning chains farmers can understand |
+| **Performance on Constraints** | 2-second response times on low-end phones with slow 3G networks |
+| **Scientific Rigor** | All advice validated against ICAR post-harvest guidelines and AGROVOC ontology |
+| **Progressive Enhancement** | Streaming UI shows critical information first while details load |
+| **Offline Resilience** | PWA enables access to cached recommendations without connectivity |
+| **Graceful Degradation** | System always produces a recommendation, even with partial data failures |
+
+---
+
+## 🧪 Testing & Correctness
+
+AgriChain defines **23 formal correctness properties** that are verified through property-based testing:
+
+- **Property-based tests** (Hypothesis for Python, fast-check for TypeScript) — minimum 100 iterations per test
+- **Unit test coverage** target: >80%
+- **Integration tests** for all external API interactions
+- **E2E tests** with Playwright for critical user journeys
+
+See the [Design Document](./DESIGN.md#correctness-properties) for the full list of properties.
 
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-* Flutter SDK (v3.0+)
-* Python 3.9+
-* Neo4j Database Instance
-* API Keys for NVIDIA NIM, AIKosh, and OpenWeatherMap
+* Node.js 18+ & npm/yarn
+* Python 3.11+
+* Neo4j AuraDB Instance
+* Redis
+* API Keys for NVIDIA NIM, Google Earth Engine, OpenWeatherMap, and Agmarknet
 
 ### Installation
 
@@ -106,12 +178,20 @@ To ensure ultra-low latency on mobile networks while delivering complex AI reaso
 3. **Frontend Setup:**
    ```bash
    cd frontend
-   flutter pub get
+   npm install
    ```
 
 4. **Run the Application:**
    * **Start FastAPI Server:** `uvicorn main:app --reload`
-   * **Start Flutter App:** `flutter run`
+   * **Start Celery Workers:** `celery -A app.celery worker --loglevel=info`
+   * **Start Frontend:** `npm run dev`
+
+---
+
+## 📖 Documentation
+
+- [**Design Document**](./DESIGN.md) — Full architecture, data models, API specs, agent specifications, and implementation roadmap
+- [**Requirements**](./REQUIREMENTS.md) — Detailed product requirements and acceptance criteria
 
 ---
 
