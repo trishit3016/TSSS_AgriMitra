@@ -1,0 +1,36 @@
+# FastAPI and web framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Pydantic for data validation
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Database clients
+neo4j==5.16.0
+supabase==2.3.0
+redis==5.0.1
+
+# Async task processing
+celery==5.3.6
+
+# LangGraph for multi-agent orchestration
+langgraph==0.0.26
+langchain-core==0.1.23
+
+# External API clients
+earthengine-api>=0.1.300
+requests==2.31.0
+google-generativeai==0.3.2
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+pytest-mock==3.12.0
+hypothesis==6.92.0
+httpx<0.25.0,>=0.24.0
+
+# Code quality
+black==24.1.1
+ruff==0.1.14
